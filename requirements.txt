@@ -1,0 +1,29 @@
+pytest>=7.4.4          # Testing framework
+pytest-cov>=4.1.0      # Coverage reporting
+pytest-mock>=3.12.0    # Mocking support
+tox>=4.11.4           # Test automation
+
+# Code Quality
+black>=23.12.1         # Code formatter
+flake8>=7.0.0         # Linting
+pylint>=3.0.3         # Advanced linting
+mypy>=1.8.0           # Type checking
+isort>=5.13.2         # Import sorting
+bandit>=1.7.6         # Security linting
+
+# Documentation
+sphinx>=7.2.6         # Documentation generator
+sphinx-rtd-theme>=2.0.0  # ReadTheDocs theme
+myst-parser>=2.0.0    # Markdown support for Sphinx
+
+# Development Tools
+ipython>=8.19.0       # Enhanced Python shell
+ipdb>=0.13.13        # Debugger
+pre-commit>=3.6.0    # Git hooks
+wheel>=0.42.0        # Package building
+twine>=4.0.2         # Package publishing
+
+# Performance Profiling
+memory-profiler>=0.61.0  # Memory profiling
+line-profiler>=4.1.2    # Line-by-line profiling
+
