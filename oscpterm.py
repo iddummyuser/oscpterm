@@ -15,6 +15,13 @@ from prompt_toolkit.formatted_text import HTML
 import os
 import shutil
 from pathlib import Path
+import pty
+import select
+import termios
+import tty
+import sys
+import threading
+from collections import defaultdict
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -79,17 +86,86 @@ RECORDINGS_DIR = "recordings"
 # Working directory tracking
 CURRENT_WORKING_DIR = os.getcwd()
 
+# Extracted highlights storage
+HIGHLIGHTS = defaultdict(set)
+
 # Command timeouts (in seconds)
 COMMAND_TIMEOUTS = {
     'default': 60,
-    'nmap': 3600,  # 1 hour for nmap scans
-    'gobuster': 1800,  # 30 minutes for directory enumeration
-    'nikto': 1800,
+    'nmap': 7200,  # 2 hours for nmap scans
+    'gobuster': 3600,  # 1 hour for directory enumeration
+    'nikto': 3600,
     'hydra': 3600,
     'enum4linux': 1800,
     'dirb': 1800,
-    'dirbuster': 1800
+    'dirbuster': 1800,
+    'sqlmap': 7200,
+    'masscan': 3600
 }
+
+# Auto-extraction patterns
+EXTRACTION_PATTERNS = {
+    'ip_addresses': {
+        'pattern': r'\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b',
+        'category': 'IPs'
+    },
+    'ipv6_addresses': {
+        'pattern': r'(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}',
+        'category': 'IPv6'
+    },
+    'mac_addresses': {
+        'pattern': r'(?:[0-9A-Fa-f]{2}[:-]){5}(?:[0-9A-Fa-f]{2})',
+        'category': 'MACs'
+    },
+    'urls': {
+        'pattern': r'https?://[^\s<>"{}|\\^`\[\]]+',
+        'category': 'URLs'
+    },
+    'emails': {
+        'pattern': r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
+        'category': 'Emails'
+    },
+    'usernames': {
+        'pattern': r'(?:user(?:name)?|login|uname)[\s:=]+([a-zA-Z0-9._-]+)',
+        'category': 'Usernames'
+    },
+    'passwords': {
+        'pattern': r'(?:pass(?:word)?|passwd|pwd)[\s:=]+([^\s]+)',
+        'category': 'Passwords'
+    },
+    'hashes': {
+        'pattern': r'\b[a-fA-F0-9]{32,128}\b',
+        'category': 'Hashes'
+    },
+    'ports': {
+        'pattern': r'(?:port|Port)\s+(\d{1,5})(?:/tcp|/udp)?(?:\s+open)?',
+        'category': 'Ports'
+    },
+    'services': {
+        'pattern': r'(\d{1,5})/(?:tcp|udp)\s+open\s+(\S+)',
+        'category': 'Services'
+    },
+    'domains': {
+        'pattern': r'\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\b',
+        'category': 'Domains'
+    },
+    'api_keys': {
+        'pattern': r'(?:api[_-]?key|apikey|access[_-]?token)[\s:=]+([a-zA-Z0-9-_]{20,})',
+        'category': 'API_Keys'
+    },
+    'private_keys': {
+        'pattern': r'-----BEGIN (?:RSA |DSA |EC )?PRIVATE KEY-----',
+        'category': 'Private_Keys'
+    }
+}
+
+# Interactive command patterns
+INTERACTIVE_COMMANDS = [
+    'ssh', 'ftp', 'telnet', 'mysql', 'psql', 'sqlmap',
+    'msfconsole', 'gdb', 'vim', 'nano', 'less', 'more',
+    'python', 'python3', 'ruby', 'perl', 'bash', 'sh',
+    'nc -', 'ncat', 'socat'
+]
 
 # ─────────────── THEME & STYLING CONFIGURATION ───────────────
 THEMES = {
@@ -139,11 +215,24 @@ else:
 
 # ─────────────── CONFIGURATION ───────────────
 ALIASES = {
-    'nmap-quick': 'nmap -sS -O -sV --top-ports 1000 {}',
-    'nmap-full': 'nmap -sS -sV -sC -O -A -p- {}',
-    'nmap-udp': 'nmap -sU --top-ports 1000 {}',
-    'gobuster-common': 'gobuster dir -u {} -w /usr/share/wordlists/dirb/common.txt',
-    'gobuster-big': 'gobuster dir -u {} -w /usr/share/wordlists/dirb/big.txt',
+    # Nmap aliases - progressive scanning approach
+    'nmap-ping': 'nmap -sn {}',                                      # Host discovery only
+    'nmap-quick': 'nmap -sS --top-ports 100 -T4 --open {}',        # Top 100 ports, fast
+    'nmap-common': 'nmap -sS --top-ports 1000 -sV -T4 --open {}',  # Top 1000 ports with versions
+    'nmap-full': 'nmap -sS -sV -sC -O --top-ports 5000 {}',        # Top 5000 with scripts
+    'nmap-aggressive': 'nmap -sS -sV -sC -O -A -p- -T4 {}',        # All ports, aggressive
+    'nmap-stealth': 'nmap -sS -Pn -T2 --top-ports 1000 {}',        # Stealthy scan
+    'nmap-udp': 'nmap -sU --top-ports 100 -T4 {}',                 # Top 100 UDP ports
+    'nmap-vulns': 'nmap -sV --script vuln {}',                     # Vulnerability scripts
+    'nmap-smb': 'nmap -p445,139 --script smb-enum* {}',            # SMB enumeration
+    'nmap-web': 'nmap -p80,443,8080,8443 -sV --script http-enum {}', # Web enumeration
+    
+    # Directory enumeration
+    'gobuster-common': 'gobuster dir -u {} -w /usr/share/wordlists/dirb/common.txt -t 30',
+    'gobuster-big': 'gobuster dir -u {} -w /usr/share/wordlists/dirb/big.txt -t 50',
+    'gobuster-files': 'gobuster dir -u {} -w /usr/share/wordlists/dirb/common.txt -x php,asp,aspx,jsp,html,js -t 30',
+    
+    # Other tools
     'nikto-scan': 'nikto -h {}',
     'nc-listen': 'nc -lvnp {}',
     'nc-connect': 'nc {} {}',
@@ -154,7 +243,9 @@ ALIASES = {
     'searchsploit': 'searchsploit {}',
     'msfconsole': 'msfconsole -q',
     'burp-proxy': 'java -jar /opt/burpsuite/burpsuite_community.jar',
-    'hydra-ssh': 'hydra -l {} -P {} ssh://{}'
+    'hydra-ssh': 'hydra -l {} -P {} ssh://{}',
+    'sqlmap-test': 'sqlmap -u {} --batch --banner',
+    'masscan-quick': 'masscan -p1-65535 {} --rate=1000'
 }
 
 DANGEROUS_COMMANDS = [
@@ -190,7 +281,9 @@ class RedTermCompleter(Completer):
         
         # Command completion
         if text.startswith(':'):
-            commands = [':engage', ':log', ':clear', ':status', ':exit', ':help', ':alias', ':search', ':tag', ':export', ':screenshot', ':theme', ':dashboard', ':record']
+            commands = [':engage', ':log', ':clear', ':status', ':exit', ':help', ':alias', 
+                       ':search', ':tag', ':export', ':screenshot', ':theme', ':dashboard', 
+                       ':record', ':highlights', ':extract']
             for cmd in commands:
                 if cmd.startswith(text):
                     yield Completion(cmd[len(text):])
@@ -264,6 +357,228 @@ def create_status_table():
     
     return table
 
+# ─────────────── AUTO-EXTRACTION FUNCTIONS ───────────────
+def extract_highlights(text):
+    """Extract interesting data from command output"""
+    for name, config in EXTRACTION_PATTERNS.items():
+        pattern = config['pattern']
+        category = config['category']
+        
+        # Special handling for sensitive data
+        if name in ['passwords', 'api_keys', 'private_keys']:
+            # Skip extraction if it's a known false positive
+            if any(fp in text.lower() for fp in ['password:', 'enter password', 'new password']):
+                continue
+        
+        matches = re.findall(pattern, text, re.IGNORECASE | re.MULTILINE)
+        
+        if matches:
+            if isinstance(matches[0], tuple):
+                # For patterns with groups
+                for match in matches:
+                    if name == 'services':
+                        # Special handling for services (port, service_name)
+                        port, service = match
+                        HIGHLIGHTS[category].add(f"{port}:{service}")
+                    else:
+                        HIGHLIGHTS[category].add(match[0])
+            else:
+                # For simple patterns
+                for match in matches:
+                    # Filter out common false positives
+                    if category == 'IPs' and match in ['127.0.0.1', '0.0.0.0']:
+                        continue
+                    if category == 'Domains' and len(match) < 4:
+                        continue
+                    HIGHLIGHTS[category].add(match)
+
+def show_highlights():
+    """Display extracted highlights"""
+    if not HIGHLIGHTS:
+        print_info("No highlights extracted yet")
+        return
+    
+    if RICH_AVAILABLE:
+        for category, items in sorted(HIGHLIGHTS.items()):
+            if items:
+                table = Table(title=f"🎯 {category}")
+                table.add_column("Value", style="cyan")
+                for item in sorted(items):
+                    table.add_row(item)
+                console.print(table)
+    else:
+        print("\n🎯 Extracted Highlights:")
+        for category, items in sorted(HIGHLIGHTS.items()):
+            if items:
+                print(f"\n{category}:")
+                for item in sorted(items):
+                    print(f"  • {item}")
+
+def save_highlights():
+    """Save highlights to database"""
+    if not HIGHLIGHTS:
+        return
+    
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    # Create highlights table if it doesn't exist
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS highlights (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            engagement TEXT,
+            category TEXT,
+            value TEXT,
+            timestamp TEXT,
+            UNIQUE(engagement, category, value)
+        )
+    ''')
+    
+    # Insert highlights
+    timestamp = datetime.utcnow().isoformat()
+    for category, items in HIGHLIGHTS.items():
+        for item in items:
+            try:
+                c.execute(
+                    "INSERT OR IGNORE INTO highlights (engagement, category, value, timestamp) VALUES (?, ?, ?, ?)",
+                    (ENGAGEMENT, category, item, timestamp)
+                )
+            except:
+                pass
+    
+    conn.commit()
+    conn.close()
+
+def load_highlights():
+    """Load highlights from database"""
+    global HIGHLIGHTS
+    HIGHLIGHTS.clear()
+    
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    try:
+        c.execute(
+            "SELECT category, value FROM highlights WHERE engagement=?",
+            (ENGAGEMENT,)
+        )
+        for category, value in c.fetchall():
+            HIGHLIGHTS[category].add(value)
+    except:
+        pass
+    
+    conn.close()
+
+# ─────────────── PTY COMMAND EXECUTION ───────────────
+def is_interactive_command(cmd):
+    """Check if command requires interactive TTY"""
+    cmd_lower = cmd.lower()
+    return any(ic in cmd_lower for ic in INTERACTIVE_COMMANDS)
+
+def run_command_pty(command):
+    """Run command with PTY support for real-time output"""
+    global last_output
+    
+    output_buffer = []
+    start_time = time.time()
+    
+    # Save terminal settings
+    old_tty = termios.tcgetattr(sys.stdin)
+    
+    try:
+        # Create PTY
+        master_fd, slave_fd = pty.openpty()
+        
+        # Fork process
+        pid = os.fork()
+        
+        if pid == 0:  # Child process
+            os.close(master_fd)
+            os.setsid()
+            os.dup2(slave_fd, 0)
+            os.dup2(slave_fd, 1)
+            os.dup2(slave_fd, 2)
+            os.close(slave_fd)
+            
+            # Set working directory
+            os.chdir(CURRENT_WORKING_DIR)
+            
+            # Execute command
+            os.execvp('/bin/sh', ['/bin/sh', '-c', command])
+        
+        else:  # Parent process
+            os.close(slave_fd)
+            
+            # Set stdin to raw mode for interactive commands
+            if is_interactive_command(command):
+                tty.setraw(sys.stdin.fileno())
+            
+            # Monitor output
+            while True:
+                try:
+                    # Check if process is still running
+                    pid_status, status = os.waitpid(pid, os.WNOHANG)
+                    if pid_status != 0:
+                        break
+                    
+                    # Check for available data
+                    r, w, e = select.select([master_fd, sys.stdin], [], [], 0.1)
+                    
+                    if master_fd in r:
+                        # Read from command output
+                        data = os.read(master_fd, 1024)
+                        if not data:
+                            break
+                        
+                        # Decode and display
+                        decoded = data.decode('utf-8', errors='replace')
+                        sys.stdout.write(decoded)
+                        sys.stdout.flush()
+                        output_buffer.append(decoded)
+                        
+                        # Record if recording
+                        if RECORDING:
+                            record_event('output', decoded)
+                        
+                        # Extract highlights in real-time
+                        extract_highlights(decoded)
+                    
+                    if sys.stdin in r and is_interactive_command(command):
+                        # Forward user input to command
+                        data = os.read(sys.stdin.fileno(), 1024)
+                        os.write(master_fd, data)
+                        
+                        # Record input if recording
+                        if RECORDING:
+                            try:
+                                decoded_input = data.decode('utf-8', errors='replace')
+                                record_event('input', decoded_input)
+                            except:
+                                pass
+                
+                except (OSError, IOError):
+                    break
+            
+            # Get final exit status
+            if pid_status == 0:
+                _, status = os.waitpid(pid, 0)
+            
+            os.close(master_fd)
+            
+            # Check exit status
+            execution_time = time.time() - start_time
+            last_output = ''.join(output_buffer)
+            
+            if os.WIFEXITED(status):
+                exit_code = os.WEXITSTATUS(status)
+                return exit_code == 0, execution_time
+            else:
+                return False, execution_time
+    
+    finally:
+        # Restore terminal settings
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_tty)
+
 # ─────────────── SCREENSHOT FUNCTIONS ───────────────
 def ensure_screenshot_dir():
     """Ensure screenshot directory exists"""
@@ -336,6 +651,204 @@ def auto_screenshot_if_enabled(command_id):
     if AUTO_SCREENSHOT and command_id:
         take_screenshot(command_id, "Auto-capture after command")
 
+# ─────────────── TERMINAL RECORDING FUNCTIONS ───────────────
+def ensure_recordings_dir():
+    """Ensure recordings directory exists"""
+    Path(RECORDINGS_DIR).mkdir(exist_ok=True)
+    engagement_dir = Path(RECORDINGS_DIR) / ENGAGEMENT
+    engagement_dir.mkdir(exist_ok=True)
+    return engagement_dir
+
+def start_recording():
+    """Start terminal recording"""
+    global RECORDING, RECORDING_START_TIME, RECORDING_DATA
+    
+    if RECORDING:
+        print_warning("Recording already in progress")
+        return
+    
+    RECORDING = True
+    RECORDING_START_TIME = time.time()
+    RECORDING_DATA = []
+    
+    # Add initial recording entry
+    RECORDING_DATA.append({
+        'time': 0,
+        'type': 'info',
+        'data': f'Recording started for engagement: {ENGAGEMENT}'
+    })
+    
+    print_success("🔴 Terminal recording started")
+    print_info("Use :record stop to end recording")
+
+def stop_recording():
+    """Stop terminal recording and save"""
+    global RECORDING, RECORDING_START_TIME, RECORDING_DATA
+    
+    if not RECORDING:
+        print_warning("No recording in progress")
+        return
+    
+    RECORDING = False
+    duration = time.time() - RECORDING_START_TIME
+    
+    # Save recording
+    recording_dir = ensure_recordings_dir()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Save as custom JSON format
+    json_file = recording_dir / f"recording_{timestamp}.json"
+    recording_metadata = {
+        'engagement': ENGAGEMENT,
+        'start_time': RECORDING_START_TIME,
+        'duration': duration,
+        'events': RECORDING_DATA,
+        'timestamp': datetime.utcnow().isoformat()
+    }
+    
+    with open(json_file, 'w') as f:
+        json.dump(recording_metadata, f, indent=2)
+    
+    # Save to database
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO recordings (engagement, filepath, duration, timestamp) VALUES (?, ?, ?, ?)",
+              (ENGAGEMENT, str(json_file), duration, datetime.utcnow().isoformat()))
+    recording_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    
+    print_success(f"🟢 Recording saved: {json_file}")
+    print_info(f"Duration: {duration:.1f} seconds")
+    
+    # Export to asciinema if available
+    if ASCIINEMA_AVAILABLE:
+        try:
+            asciinema_file = recording_dir / f"recording_{timestamp}.cast"
+            export_to_asciinema(recording_metadata, asciinema_file)
+            print_success(f"Asciinema export: {asciinema_file}")
+        except Exception as e:
+            print_warning(f"Asciinema export failed: {e}")
+    
+    return recording_id
+
+def record_event(event_type, data):
+    """Record an event during terminal recording"""
+    global RECORDING_DATA, RECORDING_START_TIME
+    
+    if RECORDING and RECORDING_START_TIME:
+        elapsed = time.time() - RECORDING_START_TIME
+        RECORDING_DATA.append({
+            'time': elapsed,
+            'type': event_type,
+            'data': data
+        })
+
+def export_to_asciinema(recording_metadata, output_file):
+    """Export recording to asciinema format"""
+    with open(output_file, 'w') as f:
+        # Write header
+        header = {
+            "version": 2,
+            "width": 80,
+            "height": 24,
+            "timestamp": int(recording_metadata['start_time']),
+            "env": {"SHELL": "/bin/bash", "TERM": "xterm-256color"}
+        }
+        f.write(json.dumps(header) + '\n')
+        
+        # Write events
+        for event in recording_metadata['events']:
+            if event['type'] in ['input', 'output']:
+                f.write(json.dumps([
+                    event['time'],
+                    'o' if event['type'] == 'output' else 'i',
+                    event['data']
+                ]) + '\n')
+
+def list_recordings():
+    """List all available recordings"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, filepath, duration, timestamp FROM recordings WHERE engagement=? ORDER BY id DESC",
+              (ENGAGEMENT,))
+    recordings = c.fetchall()
+    conn.close()
+    
+    if not recordings:
+        print_info("No recordings found for this engagement")
+        return
+    
+    if RICH_AVAILABLE:
+        table = Table(title=f"Recordings for {ENGAGEMENT}")
+        table.add_column("ID", style="cyan")
+        table.add_column("Timestamp", style="yellow")
+        table.add_column("Duration", style="green")
+        table.add_column("File", style="magenta")
+        
+        for rec_id, filepath, duration, timestamp in recordings:
+            table.add_row(
+                str(rec_id),
+                timestamp[:19],
+                f"{duration:.1f}s",
+                os.path.basename(filepath)
+            )
+        console.print(table)
+    else:
+        print(f"\n📼 Recordings for {ENGAGEMENT}:")
+        for rec_id, filepath, duration, timestamp in recordings:
+            print(f"  [{rec_id}] {timestamp[:19]} - {duration:.1f}s - {os.path.basename(filepath)}")
+
+def playback_recording(recording_id):
+    """Playback a terminal recording"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT filepath FROM recordings WHERE id=? AND engagement=?", (recording_id, ENGAGEMENT))
+    result = c.fetchone()
+    conn.close()
+    
+    if not result:
+        print_error(f"Recording {recording_id} not found")
+        return
+    
+    filepath = result[0]
+    try:
+        with open(filepath, 'r') as f:
+            recording_data = json.load(f)
+        
+        print_info(f"Playing recording from {recording_data['timestamp'][:19]}")
+        print_info(f"Duration: {recording_data['duration']:.1f}s")
+        print_info("Press Ctrl+C to stop playback\n")
+        
+        start_time = time.time()
+        
+        for event in recording_data['events']:
+            # Wait for the right time
+            while (time.time() - start_time) < event['time']:
+                time.sleep(0.01)
+            
+            if event['type'] == 'input':
+                print(f"{ENGAGEMENT}> {event['data']}", end='')
+            elif event['type'] == 'output':
+                print(event['data'], end='')
+            elif event['type'] == 'info':
+                print_info(event['data'])
+                
+    except KeyboardInterrupt:
+        print_info("\nPlayback stopped")
+    except Exception as e:
+        print_error(f"Playback failed: {e}")
+
+def export_recording_to_gif(recording_id, output_file=None):
+    """Export recording to animated GIF (requires additional setup)"""
+    if not GIF_AVAILABLE:
+        print_error("GIF export not available. Install with: pip install imageio[ffmpeg]")
+        return
+    
+    # This is a placeholder - full implementation would require
+    # terminal rendering to images and then combining into GIF
+    print_info("GIF export feature coming soon...")
+
 # ─────────────── HTML DASHBOARD GENERATION ───────────────
 def create_html_dashboard():
     """Generate an HTML dashboard with charts and statistics"""
@@ -363,6 +876,14 @@ def create_html_dashboard():
     tag_counts = {}
     for tag in all_tags:
         tag_counts[tag] = tag_counts.get(tag, 0) + 1
+    
+    # Get highlights summary
+    highlights_summary = {}
+    try:
+        c.execute("SELECT category, COUNT(*) FROM highlights WHERE engagement=? GROUP BY category", (ENGAGEMENT,))
+        highlights_summary = dict(c.fetchall())
+    except:
+        pass
     
     html_content = f"""
 <!DOCTYPE html>
@@ -454,6 +975,22 @@ def create_html_dashboard():
             gap: 30px;
             margin-bottom: 30px;
         }}
+        .highlights-section {{
+            background: #1a1a1a;
+            border: 1px solid #00ff00;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }}
+        .highlight-item {{
+            display: inline-block;
+            background: #0a0a0a;
+            border: 1px solid #00ff00;
+            padding: 5px 10px;
+            margin: 5px;
+            border-radius: 5px;
+            font-family: monospace;
+        }}
         @media (max-width: 768px) {{
             .charts-row {{
                 grid-template-columns: 1fr;
@@ -482,6 +1019,11 @@ def create_html_dashboard():
                 <div class="stat-label">Failed Commands</div>
                 <div class="stat-value" style="color: #ff0000;">{error_count}</div>
             </div>
+        </div>
+        
+        <div class="highlights-section">
+            <h3>🎯 Extracted Highlights</h3>
+            {' '.join([f'<div class="highlight-item">{cat}: {count}</div>' for cat, count in highlights_summary.items()])}
         </div>
         
         <div class="charts-row">
@@ -698,6 +1240,17 @@ def create_pdf_report():
         story.append(Paragraph(summary_text, styles['Normal']))
         story.append(Spacer(1, 20))
         
+        # Extracted Highlights
+        if HIGHLIGHTS:
+            story.append(Paragraph("Extracted Highlights", heading_style))
+            for category, items in sorted(HIGHLIGHTS.items()):
+                if items:
+                    highlight_text = f"<b>{category}:</b> {', '.join(sorted(items)[:10])}"
+                    if len(items) > 10:
+                        highlight_text += f" ... and {len(items) - 10} more"
+                    story.append(Paragraph(highlight_text, styles['Normal']))
+            story.append(Spacer(1, 20))
+        
         # Command Timeline
         story.append(Paragraph("Command Timeline", heading_style))
         c.execute("SELECT timestamp, command, sanitized_output, execution_time, tags, status FROM command_logs WHERE engagement=? ORDER BY id", (ENGAGEMENT,))
@@ -731,204 +1284,6 @@ def create_pdf_report():
         
     except Exception as e:
         print_error(f"PDF generation failed: {e}")
-
-# ─────────────── TERMINAL RECORDING FUNCTIONS ───────────────
-def ensure_recordings_dir():
-    """Ensure recordings directory exists"""
-    Path(RECORDINGS_DIR).mkdir(exist_ok=True)
-    engagement_dir = Path(RECORDINGS_DIR) / ENGAGEMENT
-    engagement_dir.mkdir(exist_ok=True)
-    return engagement_dir
-
-def start_recording():
-    """Start terminal recording"""
-    global RECORDING, RECORDING_START_TIME, RECORDING_DATA
-    
-    if RECORDING:
-        print_warning("Recording already in progress")
-        return
-    
-    RECORDING = True
-    RECORDING_START_TIME = time.time()
-    RECORDING_DATA = []
-    
-    # Add initial recording entry
-    RECORDING_DATA.append({
-        'time': 0,
-        'type': 'info',
-        'data': f'Recording started for engagement: {ENGAGEMENT}'
-    })
-    
-    print_success("🔴 Terminal recording started")
-    print_info("Use :record stop to end recording")
-
-def stop_recording():
-    """Stop terminal recording and save"""
-    global RECORDING, RECORDING_START_TIME, RECORDING_DATA
-    
-    if not RECORDING:
-        print_warning("No recording in progress")
-        return
-    
-    RECORDING = False
-    duration = time.time() - RECORDING_START_TIME
-    
-    # Save recording
-    recording_dir = ensure_recordings_dir()
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    # Save as custom JSON format
-    json_file = recording_dir / f"recording_{timestamp}.json"
-    recording_metadata = {
-        'engagement': ENGAGEMENT,
-        'start_time': RECORDING_START_TIME,
-        'duration': duration,
-        'events': RECORDING_DATA,
-        'timestamp': datetime.utcnow().isoformat()
-    }
-    
-    with open(json_file, 'w') as f:
-        json.dump(recording_metadata, f, indent=2)
-    
-    # Save to database
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO recordings (engagement, filepath, duration, timestamp) VALUES (?, ?, ?, ?)",
-              (ENGAGEMENT, str(json_file), duration, datetime.utcnow().isoformat()))
-    recording_id = c.lastrowid
-    conn.commit()
-    conn.close()
-    
-    print_success(f"🟢 Recording saved: {json_file}")
-    print_info(f"Duration: {duration:.1f} seconds")
-    
-    # Export to asciinema if available
-    if ASCIINEMA_AVAILABLE:
-        try:
-            asciinema_file = recording_dir / f"recording_{timestamp}.cast"
-            export_to_asciinema(recording_metadata, asciinema_file)
-            print_success(f"Asciinema export: {asciinema_file}")
-        except Exception as e:
-            print_warning(f"Asciinema export failed: {e}")
-    
-    return recording_id
-
-def record_event(event_type, data):
-    """Record an event during terminal recording"""
-    global RECORDING_DATA, RECORDING_START_TIME
-    
-    if RECORDING and RECORDING_START_TIME:
-        elapsed = time.time() - RECORDING_START_TIME
-        RECORDING_DATA.append({
-            'time': elapsed,
-            'type': event_type,
-            'data': data
-        })
-
-def export_to_asciinema(recording_metadata, output_file):
-    """Export recording to asciinema format"""
-    with open(output_file, 'w') as f:
-        # Write header
-        header = {
-            "version": 2,
-            "width": 80,
-            "height": 24,
-            "timestamp": int(recording_metadata['start_time']),
-            "env": {"SHELL": "/bin/bash", "TERM": "xterm-256color"}
-        }
-        f.write(json.dumps(header) + '\n')
-        
-        # Write events
-        for event in recording_metadata['events']:
-            if event['type'] in ['input', 'output']:
-                f.write(json.dumps([
-                    event['time'],
-                    'o' if event['type'] == 'output' else 'i',
-                    event['data']
-                ]) + '\n')
-
-def list_recordings():
-    """List all available recordings"""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT id, filepath, duration, timestamp FROM recordings WHERE engagement=? ORDER BY id DESC",
-              (ENGAGEMENT,))
-    recordings = c.fetchall()
-    conn.close()
-    
-    if not recordings:
-        print_info("No recordings found for this engagement")
-        return
-    
-    if RICH_AVAILABLE:
-        table = Table(title=f"Recordings for {ENGAGEMENT}")
-        table.add_column("ID", style="cyan")
-        table.add_column("Timestamp", style="yellow")
-        table.add_column("Duration", style="green")
-        table.add_column("File", style="magenta")
-        
-        for rec_id, filepath, duration, timestamp in recordings:
-            table.add_row(
-                str(rec_id),
-                timestamp[:19],
-                f"{duration:.1f}s",
-                os.path.basename(filepath)
-            )
-        console.print(table)
-    else:
-        print(f"\n📼 Recordings for {ENGAGEMENT}:")
-        for rec_id, filepath, duration, timestamp in recordings:
-            print(f"  [{rec_id}] {timestamp[:19]} - {duration:.1f}s - {os.path.basename(filepath)}")
-
-def playback_recording(recording_id):
-    """Playback a terminal recording"""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT filepath FROM recordings WHERE id=? AND engagement=?", (recording_id, ENGAGEMENT))
-    result = c.fetchone()
-    conn.close()
-    
-    if not result:
-        print_error(f"Recording {recording_id} not found")
-        return
-    
-    filepath = result[0]
-    try:
-        with open(filepath, 'r') as f:
-            recording_data = json.load(f)
-        
-        print_info(f"Playing recording from {recording_data['timestamp'][:19]}")
-        print_info(f"Duration: {recording_data['duration']:.1f}s")
-        print_info("Press Ctrl+C to stop playback\n")
-        
-        start_time = time.time()
-        
-        for event in recording_data['events']:
-            # Wait for the right time
-            while (time.time() - start_time) < event['time']:
-                time.sleep(0.01)
-            
-            if event['type'] == 'input':
-                print(f"{ENGAGEMENT}> {event['data']}", end='')
-            elif event['type'] == 'output':
-                print(event['data'], end='')
-            elif event['type'] == 'info':
-                print_info(event['data'])
-                
-    except KeyboardInterrupt:
-        print_info("\nPlayback stopped")
-    except Exception as e:
-        print_error(f"Playback failed: {e}")
-
-def export_recording_to_gif(recording_id, output_file=None):
-    """Export recording to animated GIF (requires additional setup)"""
-    if not GIF_AVAILABLE:
-        print_error("GIF export not available. Install with: pip install imageio[ffmpeg]")
-        return
-    
-    # This is a placeholder - full implementation would require
-    # terminal rendering to images and then combining into GIF
-    print_info("GIF export feature coming soon...")
 
 # ─────────────── DATABASE SETUP ───────────────
 def init_db():
@@ -974,6 +1329,16 @@ def init_db():
             filepath TEXT,
             duration REAL,
             timestamp TEXT
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS highlights (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            engagement TEXT,
+            category TEXT,
+            value TEXT,
+            timestamp TEXT,
+            UNIQUE(engagement, category, value)
         )
     ''')
     
@@ -1173,6 +1538,16 @@ def export_logs(format_type='markdown'):
                     f.write(f"- {tag}: {count}\n")
                 f.write("\n")
             
+            # Extracted highlights
+            if HIGHLIGHTS:
+                f.write("## 🎯 Extracted Highlights\n\n")
+                for category, items in sorted(HIGHLIGHTS.items()):
+                    if items:
+                        f.write(f"### {category}\n")
+                        for item in sorted(items):
+                            f.write(f"- `{item}`\n")
+                        f.write("\n")
+            
             f.write("## 🔧 Command Logs\n\n")
             c.execute("SELECT timestamp, command, sanitized_output, execution_time, tags, status, working_directory FROM command_logs WHERE engagement=? ORDER BY id", (ENGAGEMENT,))
             for row in c.fetchall():
@@ -1191,10 +1566,16 @@ def export_logs(format_type='markdown'):
         for row in c.fetchall():
             data.append(dict(zip(columns, row)))
         
+        # Add highlights
+        highlights_data = {}
+        for category, items in HIGHLIGHTS.items():
+            highlights_data[category] = list(items)
+        
         with open(filename, "w") as f:
             json.dump({
                 'engagement': ENGAGEMENT,
                 'generated': datetime.utcnow().isoformat(),
+                'highlights': highlights_data,
                 'commands': data
             }, f, indent=2)
     
@@ -1265,70 +1646,45 @@ def run_command(command):
     start_time = time.time()
     command_id = None
     
+    # Print execution info
+    info_msg = f"Executing: {expanded_cmd}"
+    print_info(info_msg)
+    if RECORDING:
+        record_event('output', f"ℹ️ {info_msg}\n")
+    
+    if timeout != COMMAND_TIMEOUTS['default']:
+        timeout_msg = f"Timeout set to: {timeout}s (long-running command detected)"
+        print_info(timeout_msg)
+        if RECORDING:
+            record_event('output', f"ℹ️ {timeout_msg}\n")
+    
+    # Use PTY for better output handling
     try:
-        info_msg = f"Executing: {expanded_cmd}"
-        print_info(info_msg)
-        if RECORDING:
-            record_event('output', f"ℹ️ {info_msg}\n")
-            
-        if timeout != COMMAND_TIMEOUTS['default']:
-            timeout_msg = f"Timeout set to: {timeout}s (long-running command detected)"
-            print_info(timeout_msg)
+        success, execution_time = run_command_pty(expanded_cmd)
+        
+        # Extract highlights from output
+        extract_highlights(last_output)
+        
+        # Save highlights
+        save_highlights()
+        
+        # Log command
+        status = 'success' if success else 'error'
+        command_id = log_command(expanded_cmd, last_output, execution_time, status)
+        
+        if success:
+            success_msg = f"Completed in {execution_time:.2f}s"
+            print_success(success_msg)
             if RECORDING:
-                record_event('output', f"ℹ️ {timeout_msg}\n")
-        
-        result = subprocess.check_output(
-            expanded_cmd, 
-            shell=True, 
-            stderr=subprocess.STDOUT, 
-            timeout=timeout,
-            cwd=CURRENT_WORKING_DIR
-        )
-        last_output = result.decode()
-        execution_time = time.time() - start_time
-        
-        # Record output
-        if RECORDING:
-            record_event('output', last_output)
-        
-        # Print output with syntax highlighting if available
-        if RICH_AVAILABLE and console:
-            # Try to detect output type for syntax highlighting
-            if 'nmap' in expanded_cmd.lower():
-                console.print(Syntax(last_output, "text", theme="monokai", background_color="default"))
-            else:
-                console.print(last_output)
+                record_event('output', f"✅ {success_msg}\n")
         else:
-            print(last_output)
-        
-        command_id = log_command(expanded_cmd, last_output, execution_time, 'success')
-        success_msg = f"Completed in {execution_time:.2f}s"
-        print_success(success_msg)
-        if RECORDING:
-            record_event('output', f"✅ {success_msg}\n")
+            error_msg = f"Failed in {execution_time:.2f}s"
+            print_error(error_msg)
+            if RECORDING:
+                record_event('output', f"❌ {error_msg}\n")
         
         # Auto-screenshot if enabled
         auto_screenshot_if_enabled(command_id)
-        
-    except subprocess.CalledProcessError as e:
-        execution_time = time.time() - start_time
-        last_output = e.output.decode() if e.output else f"Command failed with exit code {e.returncode}"
-        print_error(last_output)
-        if RECORDING:
-            record_event('output', f"❌ {last_output}\n")
-        command_id = log_command(expanded_cmd, last_output, execution_time, 'error')
-        error_msg = f"Failed in {execution_time:.2f}s"
-        print_error(error_msg)
-        if RECORDING:
-            record_event('output', f"❌ {error_msg}\n")
-        
-    except subprocess.TimeoutExpired:
-        execution_time = timeout
-        last_output = f"Command timed out after {timeout} seconds"
-        print_warning(last_output)
-        if RECORDING:
-            record_event('output', f"⚠️ {last_output}\n")
-        command_id = log_command(expanded_cmd, last_output, execution_time, 'timeout')
         
     except Exception as e:
         execution_time = time.time() - start_time
@@ -1359,6 +1715,9 @@ def show_status():
     c.execute("SELECT command, timestamp, execution_time FROM command_logs WHERE engagement=? ORDER BY id DESC LIMIT 1", (ENGAGEMENT,))
     row = c.fetchone()
     
+    # Count highlights
+    highlight_count = sum(len(items) for items in HIGHLIGHTS.values())
+    
     if RICH_AVAILABLE:
         table = create_status_table()
         table.add_row("Current Engagement", ENGAGEMENT)
@@ -1366,6 +1725,7 @@ def show_status():
         table.add_row("Theme", CURRENT_THEME)
         table.add_row("Auto-Screenshot", "Enabled" if AUTO_SCREENSHOT else "Disabled")
         table.add_row("Recording", "🔴 ACTIVE" if RECORDING else "⚫ Inactive")
+        table.add_row("Extracted Highlights", str(highlight_count))
         
         if row:
             table.add_row("Last Command", row[0][:50] + "..." if len(row[0]) > 50 else row[0])
@@ -1388,6 +1748,7 @@ def show_status():
         print(f"🎨 Theme: {CURRENT_THEME}")
         print(f"📷 Auto-Screenshot: {'Enabled' if AUTO_SCREENSHOT else 'Disabled'}")
         print(f"📼 Recording: {'🔴 ACTIVE' if RECORDING else '⚫ Inactive'}")
+        print(f"🎯 Extracted Highlights: {highlight_count}")
         
         if row:
             print(f"🕒 Last Command @ {row[1][:19]}: `{row[0]}` ({row[2]:.2f}s)")
@@ -1457,17 +1818,18 @@ def main():
     # Startup banner
     if RICH_AVAILABLE:
         startup_text = """
-[bold red]🔴 Enhanced RedTeam Terminal v2.2[/bold red]
-[cyan]Features:[/cyan] Terminal Recording • HTML Dashboard • Extended Timeouts • Auto-Screenshots
+[bold red]🔴 Enhanced RedTeam Terminal v2.3[/bold red]
+[cyan]Features:[/cyan] TTY Support • Auto-Extraction • Real-time Output • Interactive Commands
 [dim]Type :help for commands | :record start to begin recording[/dim]
         """
         console.print(Panel(startup_text, style="bold"))
     else:
-        print("🔴 Enhanced RedTeam Terminal v2.2 | OSCP-Compatible")
-        print("Features: Terminal Recording • HTML Dashboard • Extended Timeouts")
+        print("🔴 Enhanced RedTeam Terminal v2.3 | OSCP-Compatible")
+        print("Features: TTY Support • Auto-Extraction • Real-time Output")
         print("Type :help for available commands\n")
     
     init_db()
+    load_highlights()
     
     while True:
         try:
@@ -1486,12 +1848,25 @@ def main():
                         list_engagements()
                     elif tokens[1] == "switch" and len(tokens) == 3:
                         ENGAGEMENT = tokens[2].strip()
+                        load_highlights()  # Load highlights for new engagement
                         print_success(f"Switched to engagement: {ENGAGEMENT}")
                     else:
                         ENGAGEMENT = tokens[1].strip()
+                        load_highlights()  # Load highlights for new engagement
                         print_success(f"Engagement set to: {ENGAGEMENT}")
                 else:
                     print_error("Usage: :engage <n> | :engage switch <n> | :engage list")
+                    
+            elif user_input == ":highlights":
+                show_highlights()
+            
+            elif user_input.startswith(":extract"):
+                parts = user_input.split(None, 1)
+                if len(parts) == 2:
+                    extract_highlights(parts[1])
+                    print_success("Extraction complete")
+                else:
+                    print_error("Usage: :extract <text>")
                     
             elif user_input.startswith(":record"):
                 parts = user_input.split()
@@ -1592,8 +1967,10 @@ def main():
                     c.execute("DELETE FROM command_logs WHERE engagement=?", (ENGAGEMENT,))
                     c.execute("DELETE FROM screenshots WHERE engagement=?", (ENGAGEMENT,))
                     c.execute("DELETE FROM recordings WHERE engagement=?", (ENGAGEMENT,))
+                    c.execute("DELETE FROM highlights WHERE engagement=?", (ENGAGEMENT,))
                     conn.commit()
                     conn.close()
+                    HIGHLIGHTS.clear()
                     print_success(f"Logs for `{ENGAGEMENT}` cleared.")
                     
             elif user_input == ":exit":
@@ -1603,6 +1980,9 @@ def main():
                         stop_recording()
                     else:
                         continue
+                
+                # Save highlights before exit
+                save_highlights()
                         
                 if RICH_AVAILABLE:
                     console.print("👋 [bold green]Goodbye! Stay safe out there.[/bold green]")
@@ -1625,6 +2005,10 @@ def main():
   :record list           → List all recordings
   :record play <id>      → Playback a recording
   :record export <id> gif → Export recording to GIF (coming soon)
+
+🎯 AUTO-EXTRACTION:
+  :highlights            → Show extracted IPs, URLs, credentials, etc.
+  :extract <text>        → Manually extract highlights from text
 
 📊 LOGGING & SEARCH:
   :log                   → Show last 5 commands (sanitized)
@@ -1657,11 +2041,12 @@ def main():
   :help                  → Show this help
   :exit                  → Exit terminal
 
-🚀 NEW FEATURES IN v2.2:
-  • Terminal recording with playback capability
-  • Export recordings to asciinema format
-  • Recording indicator in prompt (🔴 when active)
-  • Automatic recording metadata in database
+🚀 NEW FEATURES IN v2.3:
+  • TTY support for real-time output (nmap, gobuster, etc.)
+  • Interactive command support (ssh, ftp, sqlmap)
+  • Auto-extraction of IPs, URLs, passwords, hashes
+  • Better handling of long-running commands
+  • Enhanced nmap aliases for progressive scanning
 
 📦 DEPENDENCIES:
   pip install rich reportlab pyautogui pillow prompt_toolkit asciinema imageio[ffmpeg]
