@@ -1,28 +1,79 @@
-# 🔴 Enhanced RedTeam Terminal v2.2 - Complete Manual
+# 🔴 Enhanced RedTeam Terminal v2.3 - Complete Manual
 
 ## Table of Contents
-1. [Installation & Setup](#installation--setup)
-2. [Engagement Management](#engagement-management)
-3. [Terminal Recording](#terminal-recording)
-4. [Command Execution](#command-execution)
-5. [Logging & Search](#logging--search)
-6. [Tagging System](#tagging-system)
-7. [Export & Reports](#export--reports)
-8. [Screenshots](#screenshots)
-9. [Themes & Styling](#themes--styling)
-10. [Utilities](#utilities)
-11. [Command Aliases](#command-aliases)
-12. [Advanced Usage Examples](#advanced-usage-examples)
-13. [Tips & Best Practices](#tips--best-practices)
-14. [File Structure](#file-structure)
+1. [Overview](#overview)
+2. [What's New in v2.3](#whats-new-in-v23)
+3. [Installation](#installation)
+4. [Quick Start](#quick-start)
+5. [Core Features](#core-features)
+   - [PTY Support & Real-time Output](#pty-support--real-time-output)
+   - [Interactive Commands](#interactive-commands)
+   - [Auto-Extraction](#auto-extraction)
+6. [Command Reference](#command-reference)
+   - [Engagement Management](#engagement-management)
+   - [Terminal Recording](#terminal-recording)
+   - [Highlights & Extraction](#highlights--extraction)
+   - [Logging & Search](#logging--search)
+   - [Tagging System](#tagging-system)
+   - [Export & Reports](#export--reports)
+   - [Screenshots](#screenshots)
+   - [Themes & Styling](#themes--styling)
+   - [Utilities](#utilities)
+7. [Command Aliases](#command-aliases)
+8. [Usage Examples](#usage-examples)
+9. [Tips & Best Practices](#tips--best-practices)
+10. [Troubleshooting](#troubleshooting)
 
 ---
 
-## Installation & Setup
+## Overview
+
+Enhanced RedTeam Terminal v2.3 is a powerful terminal wrapper designed for penetration testers and security professionals. It provides real-time command output, automatic data extraction, comprehensive logging, and professional reporting capabilities.
+
+### Key Features
+- **Real-time Output**: No more waiting for commands to complete
+- **Interactive Support**: Use SSH, FTP, SQLMap, and other interactive tools
+- **Auto-Extraction**: Automatically identifies IPs, URLs, credentials, and more
+- **Professional Documentation**: Generate reports in PDF, HTML, and Markdown
+- **Engagement-based Organization**: Keep projects separated and organized
+
+---
+
+## What's New in v2.3
+
+### 🚀 Major Improvements
+
+1. **PTY (Pseudo-Terminal) Support**
+   - Real-time output for all commands
+   - No buffering issues with long-running scans
+   - Progress indicators visible as they happen
+
+2. **Interactive Command Support**
+   - Full TTY emulation for interactive tools
+   - Support for SSH, FTP, Telnet, MySQL, and more
+   - Seamless input/output handling
+
+3. **Automatic Data Extraction**
+   - Extracts IPs, URLs, emails, credentials
+   - Identifies ports, services, and domains
+   - Detects hashes, API keys, and sensitive data
+
+4. **Enhanced Nmap Aliases**
+   - Progressive scanning approach
+   - Optimized for different scenarios
+   - Better timeout management
+
+---
+
+## Installation
 
 ### Requirements
+- Python 3.7 or higher
+- Linux or macOS (Windows via WSL)
+
+### Install Dependencies
 ```bash
-# Install Python dependencies
+# Core dependencies
 pip install rich reportlab pyautogui pillow prompt_toolkit asciinema imageio[ffmpeg]
 
 # Make script executable
@@ -32,345 +83,321 @@ chmod +x redterm.py
 ./redterm.py
 ```
 
-### First Launch
+### Quick Install Script
+```bash
+# One-liner installation
+curl -sSL https://example.com/install.sh | bash
+
+# Or manual installation
+git clone https://github.com/redteam/terminal.git
+cd terminal
+pip install -r requirements.txt
+./redterm.py
+```
+
+---
+
+## Quick Start
+
+### First Run
 ```bash
 $ ./redterm.py
-🔴 Enhanced RedTeam Terminal v2.2
-Features: Terminal Recording • HTML Dashboard • Extended Timeouts • Auto-Screenshots
+🔴 Enhanced RedTeam Terminal v2.3
+Features: TTY Support • Auto-Extraction • Real-time Output • Interactive Commands
 Type :help for commands | :record start to begin recording
 
 default:~> 
 ```
 
----
-
-## Engagement Management
-
-Engagements help organize different projects, clients, or testing scenarios. Each engagement maintains its own logs, recordings, and screenshots.
-
-### Create/Switch Engagement
+### Basic Workflow
 ```bash
-# Create new engagement
-default:~> :engage project_alpha
-✅ Engagement set to: project_alpha
+# 1. Create new engagement
+default:~> :engage client_test
+✅ Engagement set to: client_test
 
-# Quick switch to existing engagement
-project_alpha:~> :engage switch default
-✅ Switched to engagement: default
+# 2. Start recording
+client_test:~> :record start
+✅ 🔴 Terminal recording started
+
+# 3. Run reconnaissance
+🔴 client_test:~> nmap-quick 192.168.1.0/24
+[Real-time output appears here]
+
+# 4. View extracted data
+🔴 client_test:~> :highlights
+[Shows extracted IPs, ports, etc.]
+
+# 5. Generate report
+🔴 client_test:~> :export pdf
+✅ PDF report generated: client_test_report.pdf
 ```
 
-### List All Engagements
-```bash
-default:~> :engage list
+---
 
+## Core Features
+
+### PTY Support & Real-time Output
+
+The terminal now uses pseudo-terminals (PTY) for command execution, providing:
+
+- **Real-time Output**: See results as they happen
+- **Progress Indicators**: Watch scan progress live
+- **No Buffering**: Immediate feedback from commands
+- **Proper Signal Handling**: Ctrl+C works as expected
+
+#### Example: Real-time Nmap Scan
+```bash
+default:~> nmap-aggressive 192.168.1.100
+ℹ️ Executing: nmap -sS -sV -sC -O -A -p- -T4 192.168.1.100
+ℹ️ Timeout set to: 7200s (long-running command detected)
+
+Starting Nmap 7.92 ( https://nmap.org )
+Stats: 0:00:03 elapsed; 0 hosts completed (1 up), 1 undergoing SYN Stealth Scan
+SYN Stealth Scan Timing: About 0.65% done
+Stats: 0:00:15 elapsed; 0 hosts completed (1 up), 1 undergoing SYN Stealth Scan
+SYN Stealth Scan Timing: About 2.45% done; ETC: 16:40 (0:09:55 remaining)
+[... continues in real-time ...]
+```
+
+### Interactive Commands
+
+Full support for interactive tools and sessions:
+
+#### Supported Interactive Tools
+- **Network**: SSH, Telnet, FTP, Netcat
+- **Databases**: MySQL, PostgreSQL, SQLite
+- **Frameworks**: Metasploit, SQLMap
+- **Editors**: Vim, Nano, Emacs
+- **Interpreters**: Python, Ruby, Perl
+
+#### Example: SSH Session
+```bash
+default:~> ssh user@192.168.1.100
+The authenticity of host '192.168.1.100' can't be established.
+ECDSA key fingerprint is SHA256:xxxxxxxxxxxxxxxxxxxxxxxxxxx.
+Are you sure you want to continue connecting (yes/no)? yes
+user@192.168.1.100's password: [password input works]
+Welcome to Ubuntu 20.04.3 LTS
+
+user@target:~$ whoami
+user
+user@target:~$ exit
+logout
+Connection to 192.168.1.100 closed.
+✅ Completed in 45.3s
+```
+
+### Auto-Extraction
+
+Automatically extracts and categorizes valuable information from command outputs:
+
+#### Extracted Data Types
+- **IPs**: IPv4 and IPv6 addresses
+- **URLs**: HTTP/HTTPS links
+- **Emails**: Email addresses
+- **Usernames**: Detected usernames
+- **Passwords**: Potential passwords (sanitized)
+- **Hashes**: MD5, SHA, NTLM hashes
+- **Ports**: Open ports with services
+- **Domains**: Domain names
+- **API Keys**: Detected API keys
+- **Private Keys**: SSH/SSL private keys
+
+#### View Extracted Highlights
+```bash
+default:~> :highlights
+
+🎯 IPs
+┏━━━━━━━━━━━━━━━━━┓
+┃ Value           ┃
+┡━━━━━━━━━━━━━━━━━┩
+│ 192.168.1.100   │
+│ 192.168.1.105   │
+│ 10.10.10.5      │
+└─────────────────┘
+
+🎯 Ports
+┏━━━━━━━━━━━━━━━━━┓
+┃ Value           ┃
+┡━━━━━━━━━━━━━━━━━┩
+│ 22:ssh          │
+│ 80:http         │
+│ 443:https       │
+│ 3306:mysql      │
+└─────────────────┘
+
+🎯 URLs
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Value                           ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ http://192.168.1.100/admin      │
+│ https://target.com/login.php    │
+└─────────────────────────────────┘
+```
+
+---
+
+## Command Reference
+
+### Engagement Management
+
+Engagements organize your work by project, client, or assessment.
+
+#### Create/Switch Engagement
+```bash
+# Create new or switch to existing
+:engage project_name
+✅ Engagement set to: project_name
+
+# Quick switch to existing
+:engage switch project_name
+✅ Switched to engagement: project_name
+
+# List all engagements
+:engage list
 📁 Existing Engagements:
  🔴 default (45 commands, last: 2025-01-08 14:30:22)
  ⚫ project_alpha (23 commands, last: 2025-01-08 12:15:33)
- ⚫ client_beta (67 commands, last: 2025-01-07 18:45:12)
 ```
 
----
+### Terminal Recording
 
-## Terminal Recording
+Record your entire terminal session for documentation or training.
 
-Record entire terminal sessions with precise timing for playback, documentation, and training purposes.
-
-### Start Recording
+#### Recording Commands
 ```bash
-default:~> :record start
+# Start recording
+:record start
 ✅ 🔴 Terminal recording started
-ℹ️ Use :record stop to end recording
 
-# Prompt now shows recording indicator
-🔴 default:~> 
-```
-
-### Stop Recording
-```bash
-🔴 default:~> :record stop
+# Stop recording
+:record stop
 🟢 Recording saved: recordings/default/recording_20250108_143022.json
-ℹ️ Duration: 125.3 seconds
 ✅ Asciinema export: recordings/default/recording_20250108_143022.cast
-```
 
-### List Recordings
-```bash
-default:~> :record list
-
+# List recordings
+:record list
 ┏━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ ID ┃ Timestamp           ┃ Duration ┃ File                      ┃
 ┡━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
 │ 1  │ 2025-01-08 14:30:22 │ 125.3s   │ recording_20250108_143022 │
-│ 2  │ 2025-01-08 15:45:10 │ 87.2s    │ recording_20250108_154510 │
 └────┴─────────────────────┴──────────┴───────────────────────────┘
-```
 
-### Playback Recording
-```bash
-default:~> :record play 1
+# Playback recording
+:record play 1
 ℹ️ Playing recording from 2025-01-08 14:30:22
 ℹ️ Duration: 125.3s
 ℹ️ Press Ctrl+C to stop playback
-
-default:~> nmap -sS -O -sV --top-ports 1000 192.168.1.100
-[... playback continues in real-time ...]
 ```
 
----
+### Highlights & Extraction
 
-## Command Execution
+View and manage automatically extracted data.
 
-Execute system commands with automatic logging, timing, and output capture.
-
-### Basic Commands
+#### Highlight Commands
 ```bash
-# Regular shell commands
-default:~> ls -la
-total 24
-drwxr-xr-x  6 user user 4096 Jan  8 14:30 .
-drwxr-xr-x 12 user user 4096 Jan  8 10:15 ..
--rw-r--r--  1 user user 8192 Jan  8 14:30 redterm_logs.db
+# View all extracted highlights
+:highlights
+[Shows categorized extracted data]
 
-# Change directory (persistent)
-default:~> cd /tmp
-✅ Changed directory to: /tmp
-default:tmp> pwd
-/tmp
+# Manually extract from text
+:extract "Found server at 192.168.1.50 running on port 8080"
+✅ Extraction complete
+
+# Highlights are automatically saved and persist across sessions
 ```
 
-### Using Command Aliases
-```bash
-# Quick nmap scan
-default:~> nmap-quick 192.168.1.100
-ℹ️ Executing: nmap -sS -O -sV --top-ports 1000 192.168.1.100
-[... nmap output ...]
-✅ Completed in 45.2s
+### Logging & Search
 
-# Full nmap scan (with extended timeout)
-default:~> nmap-full 192.168.1.100
-ℹ️ Executing: nmap -sS -sV -sC -O -A -p- 192.168.1.100
-ℹ️ Timeout set to: 3600s (long-running command detected)
-[... nmap output ...]
-✅ Completed in 1523.7s
+All commands and outputs are automatically logged.
 
-# Directory enumeration
-default:~> gobuster-common http://target.com
-ℹ️ Executing: gobuster dir -u http://target.com -w /usr/share/wordlists/dirb/common.txt
-ℹ️ Timeout set to: 1800s (long-running command detected)
-[... gobuster output ...]
-```
-
-### Command Timeouts
-- **Default**: 60 seconds
-- **nmap**: 3600 seconds (1 hour)
-- **gobuster**: 1800 seconds (30 minutes)
-- **nikto**: 1800 seconds
-- **hydra**: 3600 seconds
-- **enum4linux**: 1800 seconds
-
----
-
-## Logging & Search
-
-All commands and outputs are automatically logged with sanitization for sensitive data.
-
-### View Logs
+#### Log Commands
 ```bash
 # Show last 5 commands
-default:~> :log
+:log
 
-┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━┳━━━━━━━┓
-┃ Time                ┃ Status ┃ Command                       ┃ Duration ┃ Dir ┃ Tags  ┃
-┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━╇━━━━━━━┩
-│ 2025-01-08 14:30:22 │ ✅     │ nmap-quick 192.168.1.100      │ 45.2s    │ ~   │ recon │
-│ 2025-01-08 14:31:15 │ ✅     │ gobuster-common http://ta...  │ 123.5s   │ ~   │ enum  │
-│ 2025-01-08 14:33:45 │ ❌     │ hydra -l admin -P pass.txt   │ 60.0s    │ tmp │       │
-└─────────────────────┴────────┴───────────────────────────────┴──────────┴─────┴───────┘
-
-# Show last 10 commands
-default:~> :log 10
+# Show last N commands
+:log 20
 
 # Show all commands
-default:~> :log full
+:log full
 
 # Show raw output (unsanitized)
-default:~> :log raw
+:log raw
 ```
 
-### Search Commands
+#### Search Commands
 ```bash
-# Search all fields
-default:~> :search nmap
-🔍 Search Results for 'nmap' in all:
+# Search everything
+:search 192.168.1.100
 
-[🕒 2025-01-08 14:30:22] 🏷️[recon]
-➤ nmap-quick 192.168.1.100
-Starting Nmap 7.92...
+# Search specific field
+:search command nmap      # Search in commands only
+:search output "open port" # Search in outputs only
+:search tags web          # Search in tags only
+```
 
-# Search in specific field
-default:~> :search command hydra
-🔍 Search Results for 'hydra' in command:
+### Tagging System
 
-[🕒 2025-01-08 14:33:45]
-➤ hydra -l admin -P passwords.txt ssh://192.168.1.100
-Hydra v9.2 starting...
+Organize commands with tags for easy categorization.
+
+```bash
+# Tag last command
+:tag recon,network,critical
 
 # Search by tags
-default:~> :search tags recon
-🔍 Search Results for 'recon' in tags:
-
-[🕒 2025-01-08 14:30:22] 🏷️[recon]
-➤ nmap-quick 192.168.1.100
+:search tags critical
 ```
 
-### Search Types
-- **all**: Search in commands, outputs, and tags
-- **command**: Search only in executed commands
-- **output**: Search only in command outputs
-- **tags**: Search only in tags
+### Export & Reports
 
----
+Generate professional documentation in multiple formats.
 
-## Tagging System
-
-Tag commands for easy categorization and retrieval.
-
-### Tag Last Command
+#### Export Commands
 ```bash
-# Execute a command
-default:~> nikto-scan http://target.com
-[... nikto output ...]
-✅ Completed in 234.5s
-
-# Tag it
-default:~> :tag webapp,vulnerability,critical
-🏷️ Tagged last command with: webapp,vulnerability,critical
-```
-
-### Common Tag Examples
-- **recon**: Initial reconnaissance
-- **enum**: Enumeration activities
-- **webapp**: Web application testing
-- **network**: Network-level testing
-- **exploit**: Exploitation attempts
-- **privesc**: Privilege escalation
-- **critical**: Critical findings
-- **todo**: Follow-up required
-
----
-
-## Export & Reports
-
-Generate professional reports in multiple formats.
-
-### Markdown Export
-```bash
-default:~> :export
+# Markdown report (default)
+:export
 ✅ Report exported to `default_report.md`
 
-# Contents preview:
-# Red Team Report: `default`
-Generated: 2025-01-08T15:45:30
-## 📊 Executive Summary
-- Total Commands: 45
-- Average Execution Time: 87.3s
-```
-
-### JSON Export
-```bash
-default:~> :export json
+# JSON export
+:export json
 ✅ Report exported to `default_report.json`
 
-# JSON structure:
-{
-  "engagement": "default",
-  "generated": "2025-01-08T15:45:30",
-  "commands": [
-    {
-      "id": 1,
-      "command": "nmap-quick 192.168.1.100",
-      "output": "...",
-      "execution_time": 45.2,
-      "status": "success",
-      "tags": "recon"
-    }
-  ]
-}
-```
-
-### PDF Report
-```bash
-default:~> :export pdf
+# PDF report
+:export pdf
 ✅ PDF report generated: default_report.pdf
 
-# Professional PDF includes:
-# - Title page with engagement details
-# - Executive summary with statistics
-# - Command timeline with outputs
-# - Sanitized sensitive information
-# - Professional formatting
-```
-
-### HTML Dashboard
-```bash
-default:~> :dashboard
+# HTML dashboard
+:dashboard
 ✅ HTML Dashboard generated: default_dashboard.html
-
-# Interactive dashboard features:
-# - Real-time statistics cards
-# - Command success/failure pie chart
-# - Top commands bar chart
-# - Tag usage radar chart
-# - Recent commands timeline
-# - Dark theme with matrix-style colors
 ```
 
----
+### Screenshots
 
-## Screenshots
+Capture terminal screenshots with metadata.
 
-Capture terminal screenshots with metadata overlay.
-
-### Manual Screenshot
 ```bash
-default:~> :screenshot
-Screenshot description (optional): Found SQL injection vulnerability
+# Manual screenshot
+:screenshot
+Screenshot description (optional): SQL injection found
 ✅ Screenshot saved: screenshots/default/screenshot_20250108_154530.png
 
-# Screenshot includes:
-# - Terminal content
-# - Timestamp overlay
-# - Engagement name
-# - Custom description
-```
-
-### Auto-Screenshot Mode
-```bash
 # Enable auto-screenshot
-default:~> :screenshot auto
+:screenshot auto
 ✅ Auto-screenshot enabled
 
-# Now screenshots are taken after each command
-default:~> sqlmap -u "http://target.com/page?id=1"
-[... sqlmap output ...]
-✅ Completed in 156.7s
-✅ Screenshot saved: screenshots/default/screenshot_20250108_154730.png
-
-# Toggle off
-default:~> :screenshot toggle
+# Toggle auto-screenshot
+:screenshot toggle
 ✅ Auto-screenshot disabled
 ```
 
----
+### Themes & Styling
 
-## Themes & Styling
+Customize the terminal appearance.
 
-Customize terminal appearance with built-in themes.
-
-### List Available Themes
 ```bash
-default:~> :theme
-Available Themes:
+# List themes
+:theme
 ● default
    Primary: #00ff00 | Success: #00ff00 | Error: #ff0000
 ○ matrix
@@ -379,35 +406,17 @@ Available Themes:
    Primary: #333333 | Success: #00cc00 | Error: #cc0000
 ○ neon
    Primary: #ff00ff | Success: #33ff66 | Error: #ff3366
-```
 
-### Change Theme
-```bash
-default:~> :theme matrix
+# Change theme
+:theme matrix
 ✅ Theme set to: matrix
-
-# Terminal now uses Matrix-style green colors
-
-default:~> :theme stealth
-✅ Theme set to: stealth
-
-# Subdued colors for discreet operation
 ```
 
-### Theme Descriptions
-- **default**: Classic green terminal
-- **matrix**: Matrix movie inspired
-- **stealth**: Low visibility, dark colors
-- **neon**: Bright, cyberpunk aesthetic
+### Utilities
 
----
-
-## Utilities
-
-### Show Status
+#### Status
 ```bash
-default:~> :status
-
+:status
 ┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ Property             ┃ Value                      ┃
 ┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
@@ -416,59 +425,26 @@ default:~> :status
 │ Theme               │ default                    │
 │ Auto-Screenshot     │ Disabled                   │
 │ Recording           │ 🔴 ACTIVE                  │
-│ Last Command        │ nmap-quick 192.168.1.100   │
-│ Last Execution      │ 2025-01-08 14:30:22 (45.2s)│
-│ Total Commands      │ 45                         │
-│ Average Time        │ 87.3s                      │
-│ Success Rate        │ 91.1%                      │
+│ Extracted Highlights│ 47                         │
+│ Total Commands      │ 123                        │
+│ Success Rate        │ 94.3%                      │
 └─────────────────────┴────────────────────────────┘
 ```
 
-### Clear Engagement Data
+#### Other Utilities
 ```bash
-default:~> :clear
-⚠️ Delete ALL logs for engagement 'default'? [y/N]: y
-✅ Logs for `default` cleared.
+# Show command aliases
+:alias
 
-# This removes:
-# - All command logs
-# - All screenshots
-# - All recordings
-# - All associated data
-```
+# Clear engagement data
+:clear
+⚠️ Delete ALL logs for engagement 'default'? [y/N]: 
 
-### Show Help
-```bash
-default:~> :help
+# Show help
+:help
 
-🔧 Enhanced RedTeam Terminal Commands:
-
-📁 ENGAGEMENT MANAGEMENT:
-  :engage <name>              → Create/switch to engagement
-  :engage switch <name>       → Switch to existing engagement  
-  :engage list                → List all engagements with stats
-
-📼 TERMINAL RECORDING:
-  :record start               → Start terminal recording
-  :record stop                → Stop and save recording
-  :record list                → List all recordings
-  :record play <id>           → Playback a recording
-  :record export <id> gif     → Export recording to GIF (coming soon)
-
-[... complete help text ...]
-```
-
-### Exit Terminal
-```bash
-default:~> :exit
-👋 Goodbye! Stay safe out there.
-
-# If recording is active:
-🔴 default:~> :exit
-⚠️ Recording in progress!
-Stop recording and exit? [y/N]: y
-🟢 Recording saved: recordings/default/recording_20250108_160000.json
-👋 Goodbye! Stay safe out there.
+# Exit terminal
+:exit
 ```
 
 ---
@@ -477,257 +453,217 @@ Stop recording and exit? [y/N]: y
 
 Pre-configured shortcuts for common penetration testing tools.
 
-### List All Aliases
-```bash
-default:~> :alias
+### Nmap Aliases
 
-🔧 Available Aliases:
-  nmap-quick           → nmap -sS -O -sV --top-ports 1000 {}
-  nmap-full            → nmap -sS -sV -sC -O -A -p- {}
-  nmap-udp             → nmap -sU --top-ports 1000 {}
-  gobuster-common      → gobuster dir -u {} -w /usr/share/wordlists/dirb/common.txt
-  gobuster-big         → gobuster dir -u {} -w /usr/share/wordlists/dirb/big.txt
-  nikto-scan           → nikto -h {}
-  nc-listen            → nc -lvnp {}
-  nc-connect           → nc {} {}
-  enum4linux           → enum4linux -a {}
-  smbclient-list       → smbclient -L {} -N
-  dirbuster            → dirb {} /usr/share/wordlists/dirb/common.txt
-  whatweb              → whatweb {}
-  searchsploit         → searchsploit {}
-  msfconsole           → msfconsole -q
-  burp-proxy           → java -jar /opt/burpsuite/burpsuite_community.jar
-  hydra-ssh            → hydra -l {} -P {} ssh://{}
+```bash
+# Progressive scanning approach
+nmap-ping <target>        # Host discovery only (-sn)
+nmap-quick <target>       # Top 100 ports, fast (-sS --top-ports 100 -T4)
+nmap-common <target>      # Top 1000 ports with versions (-sS --top-ports 1000 -sV -T4)
+nmap-full <target>        # Top 5000 with scripts (-sS -sV -sC -O --top-ports 5000)
+nmap-aggressive <target>  # All 65535 ports (-sS -sV -sC -O -A -p- -T4)
+nmap-stealth <target>     # Stealthy scan (-sS -Pn -T2 --top-ports 1000)
+nmap-udp <target>         # UDP scan (-sU --top-ports 100 -T4)
+nmap-vulns <target>       # Vulnerability scripts (-sV --script vuln)
+nmap-smb <target>         # SMB enumeration (-p445,139 --script smb-enum*)
+nmap-web <target>         # Web enumeration (-p80,443,8080,8443 -sV --script http-enum)
 ```
 
-### Using Aliases
+### Directory Enumeration
 
-#### Single Parameter
 ```bash
-default:~> nmap-quick 192.168.1.100
-ℹ️ Executing: nmap -sS -O -sV --top-ports 1000 192.168.1.100
-
-default:~> enum4linux 192.168.1.100
-ℹ️ Executing: enum4linux -a 192.168.1.100
+gobuster-common <url>     # Common wordlist with 30 threads
+gobuster-big <url>        # Big wordlist with 50 threads
+gobuster-files <url>      # Search for files with extensions
+dirbuster <url>           # Alternative directory brute-forcer
 ```
 
-#### Multiple Parameters
+### Other Tool Aliases
+
 ```bash
-default:~> hydra-ssh admin passwords.txt 192.168.1.100
-ℹ️ Executing: hydra -l admin -P passwords.txt ssh://192.168.1.100
-
-default:~> nc-connect 192.168.1.100 4444
-ℹ️ Executing: nc 192.168.1.100 4444
-```
-
-#### No Parameters
-```bash
-default:~> msfconsole
-ℹ️ Executing: msfconsole -q
-
-default:~> burp-proxy
-ℹ️ Executing: java -jar /opt/burpsuite/burpsuite_community.jar
+nikto-scan <target>       # Web vulnerability scanner
+nc-listen <port>          # Netcat listener
+nc-connect <ip> <port>    # Netcat connection
+enum4linux <target>       # SMB enumeration
+smbclient-list <target>   # List SMB shares
+whatweb <url>             # Web technology identifier
+searchsploit <term>       # Exploit database search
+msfconsole                # Metasploit console (quiet mode)
+hydra-ssh <user> <passlist> <target>  # SSH brute-force
+sqlmap-test <url>         # Basic SQLMap test
+masscan-quick <target>    # Fast port scanner
 ```
 
 ---
 
-## Advanced Usage Examples
+## Usage Examples
 
 ### Complete Penetration Test Workflow
+
 ```bash
-# 1. Start new engagement with recording
-default:~> :engage client_pentest
-✅ Engagement set to: client_pentest
-client_pentest:~> :record start
+# 1. Setup engagement and recording
+default:~> :engage client_pentest_2025
+✅ Engagement set to: client_pentest_2025
+
+client_pentest_2025:~> :record start
 ✅ 🔴 Terminal recording started
 
-# 2. Initial reconnaissance
-🔴 client_pentest:~> nmap-quick 10.10.10.0/24
-[... output ...]
-🔴 client_pentest:~> :tag network-scan,initial-recon
+# 2. Network discovery
+🔴 client_pentest_2025:~> nmap-ping 192.168.1.0/24
+[... real-time output shows live hosts ...]
+🔴 client_pentest_2025:~> :tag discovery,network
 
-# 3. Detailed scan of discovered host
-🔴 client_pentest:~> nmap-full 10.10.10.5
-[... output ...]
-🔴 client_pentest:~> :tag detailed-scan,target-host
+# 3. Port scanning (progressive approach)
+🔴 client_pentest_2025:~> nmap-quick 192.168.1.100
+[... finds open ports 22, 80, 443 ...]
+
+🔴 client_pentest_2025:~> nmap-full 192.168.1.100
+[... detailed service enumeration ...]
+🔴 client_pentest_2025:~> :tag target-host,detailed-scan
 
 # 4. Web enumeration
-🔴 client_pentest:~> gobuster-common http://10.10.10.5
-[... output ...]
-🔴 client_pentest:~> :tag web-enum,port-80
+🔴 client_pentest_2025:~> gobuster-common http://192.168.1.100
+[... finds /admin, /backup, /api ...]
+🔴 client_pentest_2025:~> :tag web-enum,interesting
 
-# 5. Take screenshot of interesting finding
-🔴 client_pentest:~> :screenshot
-Screenshot description: Admin panel discovered at /admin
-✅ Screenshot saved
+# 5. Check extracted data
+🔴 client_pentest_2025:~> :highlights
+[... shows all extracted IPs, URLs, services ...]
 
-# 6. Vulnerability scanning
-🔴 client_pentest:~> nikto-scan http://10.10.10.5
-[... output ...]
-🔴 client_pentest:~> :tag vuln-scan,critical
+# 6. Interactive testing
+🔴 client_pentest_2025:~> sqlmap-test http://192.168.1.100/page?id=1
+[... interactive SQLMap session ...]
 
-# 7. Stop recording and generate reports
-🔴 client_pentest:~> :record stop
-🟢 Recording saved
-client_pentest:~> :export pdf
-✅ PDF report generated
-client_pentest:~> :dashboard
-✅ HTML Dashboard generated
+# 7. Screenshot important findings
+🔴 client_pentest_2025:~> :screenshot
+Screenshot description: SQL injection confirmed on login page
+
+# 8. Generate reports
+🔴 client_pentest_2025:~> :record stop
+🔴 client_pentest_2025:~> :export pdf
+🔴 client_pentest_2025:~> :dashboard
 ```
 
-### Searching and Filtering Results
+### Interactive SSH Session
+
 ```bash
-# Find all critical findings
-default:~> :search tags critical
+# Direct SSH with full interactivity
+default:~> ssh pentester@10.10.10.5
+pentester@10.10.10.5's password: [interactive password input]
+Welcome to Ubuntu 20.04.3 LTS
 
-# Find all commands that failed
-default:~> :search output "error"
+pentester@target:~$ sudo -l
+[sudo] password for pentester: [interactive sudo password]
+User pentester may run the following commands:
+    (ALL : ALL) /usr/bin/python3
 
-# Find specific tool usage
-default:~> :search command sqlmap
-
-# View detailed logs for investigation
-default:~> :log 20
-
-# Search for specific IP addresses
-default:~> :search 192.168.1.100
+pentester@target:~$ exit
+✅ Completed in 234.5s
 ```
 
-### Multi-Engagement Workflow
+### Real-time Vulnerability Scanning
+
 ```bash
-# Working on multiple projects
-default:~> :engage list
-📁 Existing Engagements:
- 🔴 client_a (145 commands)
- ⚫ client_b (89 commands)
- ⚫ research (234 commands)
-
-# Quick switch between engagements
-client_a:~> :engage switch research
-✅ Switched to engagement: research
-
-# Check status of current engagement
-research:~> :status
+# Nikto scan with live output
+default:~> nikto-scan http://192.168.1.100
+- Nikto v2.1.6
+---------------------------------------------------------------------------
++ Target IP:          192.168.1.100
++ Target Hostname:    192.168.1.100
++ Target Port:        80
++ Start Time:         2025-01-08 16:45:23
+---------------------------------------------------------------------------
++ Server: Apache/2.4.41 (Ubuntu)
++ The anti-clickjacking X-Frame-Options header is not present.
+[... continues with findings as they're discovered ...]
 ```
 
-### Theme Usage for Different Scenarios
+### Using Highlights for Intelligence Gathering
+
 ```bash
-# Stealth mode for sensitive environments
-default:~> :theme stealth
-✅ Theme set to: stealth
+# After running various scans
+default:~> :highlights
 
-# High visibility for demonstrations
-default:~> :theme neon
-✅ Theme set to: neon
+🎯 IPs (15 found)
+┏━━━━━━━━━━━━━━━━━┓
+┃ Value           ┃
+┡━━━━━━━━━━━━━━━━━┩
+│ 192.168.1.1     │
+│ 192.168.1.100   │
+│ 192.168.1.105   │
+│ 10.10.10.5      │
+│ 172.16.0.1      │
+└─────────────────┘
 
-# Classic hacker aesthetic
-default:~> :theme matrix
-✅ Theme set to: matrix
+🎯 Services (8 found)
+┏━━━━━━━━━━━━━━━━━┓
+┃ Value           ┃
+┡━━━━━━━━━━━━━━━━━┩
+│ 22:ssh          │
+│ 80:http         │
+│ 443:https       │
+│ 3306:mysql      │
+│ 8080:http-proxy │
+└─────────────────┘
+
+🎯 URLs (12 found)
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Value                              ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ http://192.168.1.100/admin         │
+│ http://192.168.1.100/backup        │
+│ https://192.168.1.100/api/v1       │
+│ http://192.168.1.100/phpmyadmin    │
+└────────────────────────────────────┘
 ```
 
 ---
 
 ## Tips & Best Practices
 
-### 1. Organization
-- **Always use engagements** to separate different projects
-- **Name engagements descriptively**: `client_name_YYYY-MM-DD`
-- **Tag consistently** using a predefined taxonomy
-
-### 2. Documentation
-- **Enable recording** for complex test scenarios
-- **Take screenshots** of all critical findings
-- **Add descriptions** to manual screenshots
-- **Export reports** at regular intervals
-
-### 3. Security
-- **Logs are automatically sanitized** to remove passwords/tokens
-- **Use `:log raw`** carefully as it shows unsanitized data
-- **Clear engagements** after project completion
-
-### 4. Efficiency
-- **Use aliases** instead of typing full commands
-- **Leverage search** to find previous work
-- **Set appropriate themes** for your environment
-- **Enable auto-screenshot** for visual-heavy testing
-
-### 5. Reporting
-- **Generate HTML dashboards** for executive summaries
-- **Use PDF exports** for formal reports
-- **JSON exports** for integration with other tools
-- **Markdown exports** for wiki/documentation
-
-### 6. Troubleshooting
-- **Check `:status`** for current configuration
-- **Use `:log full`** to review all commands
-- **Recordings** can help recreate issues
-- **Search function** to find specific errors
-
----
-
-## File Structure
-
-```
-redterm/
-├── redterm.py                    # Main script
-├── redterm_logs.db               # SQLite database
-│
-├── recordings/                   # Terminal recordings
-│   ├── default/                  # Default engagement
-│   │   ├── recording_20250108_143022.json
-│   │   └── recording_20250108_143022.cast
-│   └── client_pentest/          # Custom engagement
-│       └── recording_20250108_154510.json
-│
-├── screenshots/                  # Screenshot captures
-│   ├── default/
-│   │   └── screenshot_20250108_143022.png
-│   └── client_pentest/
-│       └── screenshot_20250108_154510.png
-│
-└── reports/                     # Generated reports
-    ├── default_report.md
-    ├── default_report.json
-    ├── default_report.pdf
-    ├── default_dashboard.html
-    ├── client_pentest_report.md
-    └── client_pentest_dashboard.html
+### 1. Progressive Scanning
+Start with quick scans and progressively go deeper:
+```bash
+nmap-ping → nmap-quick → nmap-common → nmap-full → nmap-aggressive
 ```
 
-### Database Schema
-```sql
--- Command logs table
-command_logs (
-    id INTEGER PRIMARY KEY,
-    engagement TEXT,
-    command TEXT,
-    output TEXT,
-    sanitized_output TEXT,
-    execution_time REAL,
-    timestamp TEXT,
-    tags TEXT,
-    status TEXT,
-    working_directory TEXT
-)
+### 2. Use Tags Effectively
+Create a consistent tagging taxonomy:
+- **Phase**: `recon`, `enum`, `exploit`, `post-exploit`
+- **Type**: `network`, `web`, `database`, `credential`
+- **Priority**: `critical`, `high`, `medium`, `low`
 
--- Screenshots table
-screenshots (
-    id INTEGER PRIMARY KEY,
-    engagement TEXT,
-    command_id INTEGER,
-    filepath TEXT,
-    timestamp TEXT
-)
+### 3. Regular Exports
+Export data regularly to avoid loss:
+```bash
+# Quick markdown export after each phase
+:export
 
--- Recordings table
-recordings (
-    id INTEGER PRIMARY KEY,
-    engagement TEXT,
-    filepath TEXT,
-    duration REAL,
-    timestamp TEXT
-)
+# Full PDF report at milestones
+:export pdf
 ```
+
+### 4. Leverage Auto-Extraction
+Review highlights frequently:
+```bash
+# Check after each scan
+:highlights
+
+# Export includes all highlights
+:export json
+```
+
+### 5. Interactive Tool Usage
+For interactive tools, the terminal handles I/O seamlessly:
+- Password prompts work normally
+- Tab completion functions
+- Ctrl+C interrupts cleanly
+- Sessions remain stable
+
+### 6. Recording Best Practices
+- Start recording at engagement beginning
+- Stop recording before generating reports
+- Recordings capture everything for training/review
 
 ---
 
@@ -735,57 +671,71 @@ recordings (
 
 ### Common Issues
 
-#### Recording Not Working
-```bash
-# Check if dependencies are installed
-pip install asciinema
+#### 1. Command Output Not Showing
+- **Issue**: Command seems to hang with no output
+- **Solution**: The PTY support should prevent this, but if it occurs:
+  ```bash
+  # Use Ctrl+C to interrupt
+  # Check if command requires sudo
+  # Verify network connectivity
+  ```
 
-# Verify recording status
-:status
+#### 2. Interactive Commands Not Working
+- **Issue**: Can't type in SSH/FTP sessions
+- **Solution**: Ensure terminal is in proper mode:
+  ```bash
+  # The tool handles TTY automatically
+  # If issues persist, check terminal emulator settings
+  # Try running outside tmux/screen first
+  ```
+
+#### 3. Extraction Missing Data
+- **Issue**: Some IPs/URLs not extracted
+- **Solution**: Manually extract:
+  ```bash
+  :extract "The server IP is 192.168.1.200"
+  ```
+
+#### 4. Recording Playback Issues
+- **Issue**: Recording won't play back
+- **Solution**: 
+  ```bash
+  # Check recording exists
+  :record list
+  
+  # Verify file permissions
+  ls -la recordings/[engagement]/
+  ```
+
+#### 5. Performance Issues
+- **Issue**: Terminal feels slow
+- **Solution**:
+  ```bash
+  # Disable auto-screenshot if not needed
+  :screenshot toggle
+  
+  # Export and clear old logs
+  :export
+  :clear
+  ```
+
+### Debug Mode
+For troubleshooting, run with debug output:
+```bash
+python3 redterm.py --debug
 ```
 
-#### Screenshots Failing
-```bash
-# Install required packages
-pip install pyautogui pillow
-
-# Test with manual screenshot
-:screenshot
-```
-
-#### PDF Export Errors
-```bash
-# Install reportlab
-pip install reportlab
-
-# Try markdown export as alternative
-:export markdown
-```
-
-#### Command Timeouts
-```bash
-# Long-running commands have extended timeouts
-# nmap-full: 1 hour
-# gobuster: 30 minutes
-# Adjust in code if needed
-```
+### Getting Help
+- Use `:help` for built-in documentation
+- Check GitHub issues for known problems
+- Submit bug reports with `:status` output
 
 ---
 
 ## Conclusion
 
-The Enhanced RedTeam Terminal v2.2 provides a comprehensive solution for penetration testers to:
-- Organize multiple engagements
-- Record terminal sessions
-- Automatically log all commands
-- Generate professional reports
-- Maintain visual documentation
-- Search through historical data
+Enhanced RedTeam Terminal v2.3 transforms your command-line workflow with real-time output, automatic intelligence gathering, and comprehensive documentation capabilities. The PTY support ensures all tools work as expected, while auto-extraction saves valuable time in identifying important data.
 
+Whether you're conducting a quick security assessment or a full penetration test, this tool provides the framework to work efficiently while maintaining detailed documentation of your activities.
 
-
-#####vibe_coding
-
-This tool significantly improves workflow efficiency and documentation quality for security assessments.
-
-For updates and contributions, visit the project repository.
+Happy hacking! 🚀
