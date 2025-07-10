@@ -15,6 +15,8 @@ from prompt_toolkit.formatted_text import HTML
 import os
 import shutil
 from pathlib import Path
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 try:
     from rich.console import Console
